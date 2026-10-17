@@ -258,8 +258,20 @@ class PortfolioDecision(BaseModel):
         default=None,
         description="Optional recommended holding period, e.g. '3-6 months'.",
     )
+    entry_price: float | None = Field(
+        default=None,
+        description="Optional proposed correction to the Trader's entry price, in quote currency. "
+                    "Set null when no correction is warranted. Never repeat an unchanged price "
+                    "or invent one when evidence is missing. Explain corrections in the executive summary.",
+    )
+    stop_loss: float | None = Field(
+        default=None,
+        description="Optional proposed correction to the Trader's stop loss, in quote currency. "
+                    "Set null when no correction is warranted. Never repeat an unchanged price "
+                    "or invent one when evidence is missing. Explain corrections in the executive summary.",
+    )
 
-    @field_validator("price_target", mode="before")
+    @field_validator("price_target", "entry_price", "stop_loss", mode="before")
     @classmethod
     def _nullish_float_to_none(cls, v):
         return _coerce_optional_float(v)
@@ -285,6 +297,9 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     target = decision.price_target if decision.price_target is not None else "not provided"
     parts.extend(["", f"**Price Target**: {target}"])
     parts.extend(["", f"**Time Horizon**: {decision.time_horizon or 'not provided'}"])
+    for label, value in (("Entry Price Adjustment", decision.entry_price),
+                         ("Stop Loss Adjustment", decision.stop_loss)):
+        parts.extend(["", f"**{label}**: {value if value is not None else 'null'}"])
     return "\n".join(parts)
 
 
