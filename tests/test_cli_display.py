@@ -73,7 +73,7 @@ def test_the_state_log_keeps_non_ascii_readable(tmp_path):
     """Reports can be in any language; the log is read by a person."""
     _bare_graph(tmp_path)._log_state("2026-09-01", _state("600519.SS"))
 
-    written = next(tmp_path.rglob("full_states_log*.json")).read_text(encoding="utf-8")
+    written = next(tmp_path.glob("runs/*.json")).read_text(encoding="utf-8")
     assert "买入" in written
     assert "\\u" not in written
     assert json.loads(written)  # still valid JSON
@@ -85,7 +85,7 @@ def test_the_state_log_names_each_field_as_the_state_does(tmp_path):
     copy of the managers' decisions under the debate states."""
     _bare_graph(tmp_path)._log_state("2026-09-01", _state("NVDA"))
 
-    logged = json.loads(next(tmp_path.rglob("full_states_log*.json")).read_text(encoding="utf-8"))
+    logged = json.loads(next(tmp_path.glob("runs/*.json")).read_text(encoding="utf-8"))
     assert logged["trader_investment_plan"] == "交易计划"
     assert logged["investment_plan"] == "计划"
     assert "trader_investment_decision" not in logged

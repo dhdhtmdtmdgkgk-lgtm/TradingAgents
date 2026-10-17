@@ -34,10 +34,12 @@ def test_record_decision_appends_a_pending_entry(tmp_path):
 
 
 @pytest.mark.unit
-def test_record_decision_skips_a_run_without_a_decision(tmp_path):
+def test_record_decision_rejects_a_run_without_a_decision(tmp_path):
     graph = _bare_graph(tmp_path)
-    graph.record_decision("NVDA", "2026-01-10", {})
+    with pytest.raises(ValueError, match="no final decision"):
+        graph.record_decision("NVDA", "2026-01-10", {})
     assert graph.memory_log.load_entries() == []
+    assert not list(tmp_path.rglob("*.json"))
 
 
 # --- the CLI path ----------------------------------------------------------------
@@ -189,4 +191,4 @@ def test_recording_a_run_writes_its_state_log(tmp_path):
 
     graph.record_decision("NVDA", "2026-09-23", state)
 
-    assert list(tmp_path.glob("NVDA/TradingAgentsStrategy_logs/full_states_log_2026-09-23.json"))
+    assert list(tmp_path.glob("runs/*.json"))

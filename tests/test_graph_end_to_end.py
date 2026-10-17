@@ -173,16 +173,33 @@ def test_an_interrupted_run_resumes_from_its_checkpoint(tmp_path, monkeypatch, o
     graph = _graph(tmp_path, monkeypatch, model, checkpoint_enabled=True)
     with pytest.raises(RuntimeError, match="provider unavailable"):
         graph.propagate("NVDA", TRADE_DATE)
+    assert not list((tmp_path / "results").rglob("*.json"))
     calls_before = len(model.calls)
 
     _, signal = graph.propagate("NVDA", TRADE_DATE)
 
     assert signal == "Overweight"
+    import json
+    records = list((tmp_path / "results" / "runs").glob("*.json"))
+    assert len(records) == 1
+    assert json.loads(records[0].read_text())["resumed"] is True
     resumed_calls = len(model.calls) - calls_before
     full_run = ScriptedModel()
     _graph(tmp_path / "fresh", monkeypatch, full_run).propagate("NVDA", TRADE_DATE)
     # The resumed run makes only the calls the interrupted one had not completed.
     assert resumed_calls == len(full_run.calls) - (model.fail_at - 1)
+
+
+def test_same_date_runs_get_unique_json_but_keep_existing_memory_policy(tmp_path, monkeypatch, offline):
+    import json
+    graph = _graph(tmp_path, monkeypatch, ScriptedModel(structured=True))
+    for _ in range(2):
+        graph.propagate("NVDA", TRADE_DATE)
+    records = [json.loads(p.read_text()) for p in (tmp_path / "results" / "runs").glob("*.json")]
+    assert len(records) == 2
+    assert len({r["run_id"] for r in records}) == 2
+    assert len(graph.memory_log.load_entries()) == 1
+    assert all(r["api_usage"]["llm_calls"] > 0 for r in records)
 
 
 @pytest.mark.unit
@@ -195,7 +212,7 @@ def test_a_graph_reused_across_runs_keeps_no_run_state(tmp_path, monkeypatch, of
 
     held = [v for v in vars(graph).values() if isinstance(v, dict) and TRADE_DATE in v]
     assert held == []
-    assert len(list(tmp_path.glob("results/NVDA/TradingAgentsStrategy_logs/*.json"))) == 2
+    assert len(list(tmp_path.glob("results/runs/*.json"))) == 2
 
 
 @pytest.mark.unit

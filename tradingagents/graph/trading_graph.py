@@ -2,8 +2,9 @@ import hashlib
 import json
 import logging
 import os
+import uuid
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,8 @@ from tradingagents.llm_clients import create_tier_client, tier_provider
 from tradingagents.memory import TradingMemoryLog, settlement
 from tradingagents.memory.reflection import Reflector
 from tradingagents.reporting import write_report_tree
+from tradingagents.run_records import CompletedRunSaveError, write_completed_run
+from tradingagents.stats import StatsCallbackHandler
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
@@ -69,7 +72,9 @@ class TradingAgentsGraph:
         """
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
-        self.callbacks = callbacks or []
+        self.usage = StatsCallbackHandler()
+        self.callbacks = [*(callbacks or []), self.usage]
+        self._run_metadata = {}
 
         set_config(self.config)
 
@@ -164,6 +169,7 @@ class TradingAgentsGraph:
             "analysts=parallel",
             "memory=parallel",
             "price_prerequisite=1",
+            "price_fields=1",
             f"settings={digest}",
         ])
 
@@ -275,6 +281,12 @@ class TradingAgentsGraph:
             "output_language": cfg.get("output_language"),
             "data_vendors": dict(cfg.get("data_vendors") or {}),
             "tool_vendors": dict(cfg.get("tool_vendors") or {}),
+            "model_options": {key: cfg.get(key) for key in (
+                "temperature", "max_tokens", "llm_max_retries", "openai_reasoning_effort",
+                "google_thinking_level", "anthropic_effort")},
+            "analysis_limits": {key: cfg.get(key) for key in (
+                "max_tool_rounds", "max_recur_limit", "news_article_limit", "global_news_article_limit",
+                "global_news_lookback_days", "holding_period_days", "benchmark_ticker", "benchmark_map")},
         }
 
     def save_reports(self, final_state, ticker, save_path=None, html=True) -> Path:
@@ -300,6 +312,11 @@ class TradingAgentsGraph:
         memory log's lessons are not here: the graph's Memory Log step settles
         and loads them alongside the analysts (see ``_memory_step``).
         """
+        self._run_metadata = {
+            "run_id": uuid.uuid4().hex, "started_at": datetime.now(UTC).isoformat(),
+            "portfolio": portfolio.model_dump(mode="json") if portfolio is not None else None,
+            "usage_start": self.usage.get_stats() if hasattr(self, "usage") else {},
+        }
         return self.propagator.create_initial_state(
             company_name,
             trade_date,
@@ -361,7 +378,15 @@ class TradingAgentsGraph:
     def record_decision(self, company_name, trade_date, final_state):
         """Record a finished run: its state log, and its decision in the memory log
         for reflection on the next same-ticker run. propagate() and the CLI both end here."""
-        self._log_state(trade_date, final_state)
+        if not (final_state.get("final_trade_decision") or "").strip():
+            raise ValueError("analysis has no final decision; no completed JSON saved")
+        metadata = getattr(self, "_run_metadata", {})
+        metadata["resumed"] = self._resuming if hasattr(self, "_resuming") else False
+        try:
+            path = self._log_state(trade_date, final_state)
+        except Exception as exc:
+            raise CompletedRunSaveError("Analysis completed, but saving its JSON failed. Check the results directory.") from exc
+        logger.info("Completed analysis saved: %s", path)
         decision = final_state.get("final_trade_decision")
         if not decision:
             logger.warning("No final decision for %s on %s; nothing added to the memory log",
@@ -371,12 +396,13 @@ class TradingAgentsGraph:
             ticker=company_name, trade_date=trade_date, final_trade_decision=decision,
             rating=run_rating(final_state),
         )
+        return path
 
     def _run_graph(self, company_name, trade_date, asset_type: str = "stock",
                    checkpoint_thread_id: str | None = None, portfolio=None):
         """Execute the graph and write the resulting state to disk and memory log."""
         init_agent_state = self.create_run_state(company_name, trade_date, asset_type, portfolio)
-        args = self.propagator.get_graph_args()
+        args = self.propagator.get_graph_args(callbacks=[self.usage])
 
         # Inject the checkpoint thread_id (from checkpoint_scope) so the same
         # ticker+date+graph-shape resumes; a different one starts fresh (#1089).
@@ -418,6 +444,12 @@ class TradingAgentsGraph:
         and reports come from their own finished steps ("tasks") as they happen.
         """
         args = {**args, "stream_mode": ["values", "tasks"]}
+        config = dict(args.get("config") or {})
+        handlers = list(config.get("callbacks") or [])
+        if self.usage not in handlers:
+            handlers.append(self.usage)
+        config["callbacks"] = handlers
+        args["config"] = config
         # The graph's own config serves every tool call, as in propagate(), even
         # when the process-wide config has changed since. Each step runs in the
         # run's context, so the caller keeps its own between steps.
@@ -438,41 +470,8 @@ class TradingAgentsGraph:
             context.run(stream.close)
 
     def _log_state(self, trade_date, final_state):
-        """Write a run's final state to JSON under the run's own ticker."""
-        entry = {
-            "company_of_interest": final_state["company_of_interest"],
-            "trade_date": final_state["trade_date"],
-            "market_report": final_state["market_report"],
-            "sentiment_report": final_state["sentiment_report"],
-            "news_report": final_state["news_report"],
-            "fundamentals_report": final_state["fundamentals_report"],
-            "investment_debate_state": {
-                "bull_history": final_state["investment_debate_state"]["bull_history"],
-                "bear_history": final_state["investment_debate_state"]["bear_history"],
-                "history": final_state["investment_debate_state"]["history"],
-                "current_response": final_state["investment_debate_state"][
-                    "current_response"
-                ],
-            },
-            "trader_investment_plan": final_state["trader_investment_plan"],
-            "risk_debate_state": {
-                "aggressive_history": final_state["risk_debate_state"]["aggressive_history"],
-                "conservative_history": final_state["risk_debate_state"]["conservative_history"],
-                "neutral_history": final_state["risk_debate_state"]["neutral_history"],
-                "history": final_state["risk_debate_state"]["history"],
-            },
-            "investment_plan": final_state["investment_plan"],
-            "final_trade_decision": final_state["final_trade_decision"],
-            "final_rating": run_rating(final_state),
-            "run_settings": self.run_settings(),
-        }
-
-        # A ticker that would escape the results directory is rejected.
-        safe_ticker = safe_ticker_component(final_state["company_of_interest"])
-        directory = Path(self.config["results_dir"]) / safe_ticker / "TradingAgentsStrategy_logs"
-        directory.mkdir(parents=True, exist_ok=True)
-
-        log_path = directory / f"full_states_log_{trade_date}.json"
-        with open(log_path, "w", encoding="utf-8") as f:
-            # Reports can be in any language and this file is read by a person.
-            json.dump(entry, f, indent=4, ensure_ascii=False)
+        """Write one immutable successful-run JSON; failed runs never call here."""
+        metadata = getattr(self, "_run_metadata", {})
+        usage = self.usage.since(metadata.get("usage_start")) if hasattr(self, "usage") else None
+        return write_completed_run(self.config["results_dir"], final_state, self.run_settings(),
+                                   metadata=metadata, usage=usage)

@@ -9,6 +9,7 @@ from cli.run import run_analysis
 from tradingagents.backtest import iter_grid, run_backtest, summarize
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.portfolio import load_portfolio
+from tradingagents.run_records import CompletedRunSaveError
 
 # prompt_toolkit's win32 output module is importable only on Windows (it asserts
 # the platform at import time), so gate on the platform rather than catching the
@@ -100,6 +101,9 @@ def analyze(
         raise typer.Exit(code=1) from None
 
 
+    except CompletedRunSaveError as exc:
+        typer.echo(str(exc), err=True)  # fixed safe message from our writer boundary
+        raise typer.Exit(code=1) from None
     except Exception as exc:
         # Provider messages can carry authenticated URLs. The exception type is
         # enough for a safe failure notice; no failed-run JSON is written here.

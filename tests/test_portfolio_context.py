@@ -169,6 +169,8 @@ def test_completed_run_clears_the_checkpoint_it_wrote(tmp_path, monkeypatch):
     import tradingagents.graph.trading_graph as tg
 
     graph = _bare_graph(tmp_path)
+    from tradingagents.stats import StatsCallbackHandler
+    graph.usage = StatsCallbackHandler()
     graph.config.update({"checkpoint_enabled": True, "data_cache_dir": str(tmp_path),
                          "results_dir": str(tmp_path)})
     graph.debug = False
