@@ -271,6 +271,13 @@ def get_macro_data(
     except ValueError:
         summary = f"\n**Latest:** {last_val} ({last_date})\n"
 
+    if series_id in ("CPIAUCSL", "CPILFESL"):
+        summary += (
+            "\nCPI values are index levels. The change above covers the displayed observation "
+            "window and is not necessarily year-over-year (YoY) inflation; YoY compares "
+            "the same month one year apart.\n"
+        )
+
     shown = points
     note = ""
     if len(points) > MAX_ROWS:
