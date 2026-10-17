@@ -7,6 +7,7 @@ from cli.models import AnalystType, AssetType
 from cli.prompts import filter_analysts_for_asset_type, parse_analysts
 from cli.run import run_analysis
 from tradingagents.backtest import iter_grid, run_backtest, summarize
+from tradingagents.dataflows.errors import VendorError
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.portfolio import load_portfolio
 from tradingagents.run_records import CompletedRunSaveError
@@ -104,7 +105,7 @@ def analyze(
     except CompletedRunSaveError as exc:
         typer.echo(str(exc), err=True)  # fixed safe message from our writer boundary
         raise typer.Exit(code=1) from None
-    except Exception as exc:
+    except (VendorError, OSError) as exc:
         # Provider messages can carry authenticated URLs. The exception type is
         # enough for a safe failure notice; no failed-run JSON is written here.
         typer.echo(f"Analysis failed ({type(exc).__name__}). Check data availability and provider settings.", err=True)

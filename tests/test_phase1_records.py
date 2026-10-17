@@ -136,3 +136,13 @@ def test_cli_distinguishes_completed_analysis_from_archive_failure(monkeypatch):
     result = CliRunner().invoke(main.app, [])
     assert result.exit_code == 1
     assert "Analysis completed, but saving its JSON failed" in result.output
+
+
+def test_same_callback_bound_to_model_and_graph_is_not_double_counted():
+    from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
+    handler = StatsCallbackHandler()
+    model = FakeListChatModel(responses=["offline reply"], callbacks=[handler])
+    model.invoke("test", config={"callbacks": [handler]})
+    assert handler.get_stats()["llm_calls"] == 1
+    assert handler.get_stats()["responses"] == 1

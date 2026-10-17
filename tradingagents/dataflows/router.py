@@ -86,11 +86,9 @@ TOOLS_CATEGORIES = {
     }
 }
 
-# Optional enrichment categories. These add macro/event context to the news
-# analyst but are not core to a decision, so a vendor failure here degrades to a
-# sentinel instead of aborting the run (a bad LLM-supplied indicator, a missing
-# key, or a network blip should not crash an analysis over flavour data). Core
-# categories (prices, fundamentals, news) still raise so a broken primary is loud.
+# Research inputs may be partially unavailable. Preserve the explicit sentinel
+# and logs rather than aborting for missing enrichment. Core prices remain a
+# prerequisite, checked before the analysts by dataflows.availability.
 OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets", "fundamental_data", "news_data", "technical_indicators"}
 
 # Mapping of methods to their vendor-specific implementations
