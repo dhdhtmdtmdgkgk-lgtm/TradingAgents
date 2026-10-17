@@ -91,7 +91,7 @@ TOOLS_CATEGORIES = {
 # sentinel instead of aborting the run (a bad LLM-supplied indicator, a missing
 # key, or a network blip should not crash an analysis over flavour data). Core
 # categories (prices, fundamentals, news) still raise so a broken primary is loud.
-OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets"}
+OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets", "fundamental_data", "news_data", "technical_indicators"}
 
 # Mapping of methods to their vendor-specific implementations
 VENDOR_METHODS = {
@@ -197,7 +197,7 @@ def no_data_available(error: NoMarketDataError) -> str:
     )
 
 
-def route_to_vendor(method: str, *args, **kwargs):
+def route_to_vendor(method: str, *args, _validate=None, **kwargs):
     """Route method calls to appropriate vendor implementation with fallback support."""
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
@@ -233,7 +233,10 @@ def route_to_vendor(method: str, *args, **kwargs):
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
         try:
-            return impl_func(*args, **kwargs)
+            result = impl_func(*args, **kwargs)
+            if _validate is not None and not _validate(result):
+                raise NoMarketDataError(str(args[0]), detail="no usable price rows in the requested range")
+            return result
         except VendorUnavailableError as e:
             logger.warning("Vendor %r unavailable for %s: %s; trying next vendor.", vendor, method, e)
             # Kept so an all-unavailable chain can say the vendor was the

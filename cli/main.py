@@ -100,6 +100,16 @@ def analyze(
         raise typer.Exit(code=1) from None
 
 
+    except Exception as exc:
+        # Provider messages can carry authenticated URLs. The exception type is
+        # enough for a safe failure notice; no failed-run JSON is written here.
+        typer.echo(f"Analysis failed ({type(exc).__name__}). Check data availability and provider settings.", err=True)
+        raise typer.Exit(code=1) from None
+    except KeyboardInterrupt:
+        typer.echo("Analysis cancelled. No completed analysis JSON was saved.", err=True)
+        raise typer.Exit(code=130) from None
+
+
 @app.command()
 def backtest(
     tickers: str = typer.Argument(..., help="Comma-separated tickers, e.g. NVDA,AAPL"),

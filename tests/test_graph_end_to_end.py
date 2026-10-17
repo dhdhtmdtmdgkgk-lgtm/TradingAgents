@@ -106,7 +106,9 @@ def offline(monkeypatch, tmp_path):
     for method, vendors in router.VENDOR_METHODS.items():
         for vendor in vendors:
             monkeypatch.setitem(vendors, vendor,
-                                lambda *a, _m=method, **k: called.add(_m) or f"{_m} data")
+                                lambda *a, _m=method, **k: called.add(_m) or (
+                                    "Date,Open,High,Low,Close,Volume\n2026-01-08,100,101,99,100.5,1000000\n"
+                                    if _m == "get_stock_data" else f"{_m} data"))
     prices = pd.DataFrame({
         "Date": pd.bdate_range(end=TRADE_DATE, periods=60),
         "Open": 100.0, "High": 101.0, "Low": 99.0, "Close": 100.5, "Volume": 1_000_000,
@@ -145,6 +147,24 @@ def test_a_full_run_reaches_a_logged_decision(tmp_path, monkeypatch, offline, st
                     "get_insider_transactions", "ohlcv"}
     assert offline == tool_methods
     assert [e["rating"] for e in graph.memory_log.load_entries()] == ["Overweight"]
+
+
+@pytest.mark.parametrize("selected", [("market",), ("news",)])
+def test_missing_core_prices_stop_before_any_llm_or_memory(tmp_path, monkeypatch, offline, selected):
+    from tradingagents.dataflows.errors import NoMarketDataError
+    model = ScriptedModel()
+    graph = _graph(tmp_path, monkeypatch, model)
+    # Rebuild with either selection: the prerequisite is independent of analysts.
+    graph.workflow = graph.graph_setup.setup_graph(
+        selected, memory_node=graph._memory_step, price_node=trading_graph.require_price_data)
+    graph.graph = graph.workflow.compile()
+    for vendor in router.VENDOR_METHODS["get_stock_data"]:
+        monkeypatch.setitem(router.VENDOR_METHODS["get_stock_data"], vendor, lambda *a, **k: "NO_DATA_AVAILABLE")
+    with pytest.raises(NoMarketDataError, match="core price"):
+        graph.propagate("NVDA", TRADE_DATE)
+    assert model.calls == []
+    assert graph.memory_log.load_entries() == []
+    assert not list(tmp_path.rglob("*.json"))
 
 
 @pytest.mark.unit
@@ -226,7 +246,8 @@ def test_a_streamed_run_reads_its_own_graph_config(tmp_path, monkeypatch, offlin
     set_config({"output_language": "German"})
     seen = []
     monkeypatch.setitem(router.VENDOR_METHODS["get_stock_data"], "yfinance",
-                        lambda *a, **k: seen.append(get_config()["output_language"]) or "prices")
+                        lambda *a, **k: seen.append(get_config()["output_language"]) or
+                        "Date,Close\n2026-01-08,100.5\n")
 
     between = [get_config()["output_language"]
                for _ in graph.stream_run(graph.create_run_state("NVDA", TRADE_DATE), **graph.propagator.get_graph_args())]
