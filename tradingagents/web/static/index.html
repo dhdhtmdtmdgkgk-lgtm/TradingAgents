@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light"><title>TradingAgents · Research Desk</title>
+  <link rel="icon" href="data:,"><link rel="stylesheet" href="/static/app.css">
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand"><span class="brand-mark" aria-hidden="true">TA</span><span>TradingAgents<span class="brand-sub">RESEARCH DESK</span></span></a>
+  <nav aria-label="주 메뉴"><a id="nav-main" href="/" class="active">분석 데스크</a><a id="nav-history" href="/history">분석 기록</a></nav>
+  <span class="server-badge" id="server-mode">로컬 리서치</span>
+</header>
+<main>
+  <div class="page-heading"><div><p class="eyebrow">PERSONAL INVESTMENT RESEARCH</p><h1 id="page-title">시장을 읽고, 근거를 확인하세요.</h1></div><span class="today" id="today"></span></div>
+  <div id="global-error" class="notice error" role="alert" hidden></div>
+  <section id="main-page" class="desk" aria-label="메인 분석 화면">
+    <div class="column left-column">
+      <section class="card chart-card"><div class="card-heading"><h2><span class="section-icon">↗</span> 시장 차트 <span id="chart-symbol" class="ticker-badge">NVDA</span></h2><span class="muted">TradingView</span></div>
+        <div id="chart" class="chart"><div class="chart-placeholder">TradingView 차트를 불러오는 중입니다.</div></div>
+        <p class="chart-caption">차트는 별도 시세를 사용하는 보조 도구이며 분석 기준일의 가격과 다를 수 있습니다.</p>
+      </section>
+      <section class="card agents-card"><div class="card-heading"><h2>에이전트 실행 현황</h2><span id="agent-counter" class="counter">0 / 14</span></div>
+        <div class="progress-track"><div id="progress-fill"></div></div>
+        <div class="agent-list" id="agents" aria-live="polite"></div>
+        <div class="debate-actions"><button type="button" data-report="Research Debate" disabled>연구 토론 전체</button><button type="button" data-report="Risk Debate" disabled>위험 토론 전체</button></div>
+      </section>
+    </div>
+    <div class="column right-column">
+      <section class="card input-card"><div class="card-heading"><h2>분석 설정</h2><span class="language-badge">보고서 · 한국어</span></div>
+        <form id="analysis-form">
+          <div class="form-grid">
+            <label>종목 티커<input id="ticker" name="ticker" value="NVDA" placeholder="예: NVDA" maxlength="30" required autocomplete="off" spellcheck="false"></label>
+            <label>분석 기준일<input id="trade-date" type="date" required></label>
+            <label>현재 보유 수량 <span class="optional">선택</span><input id="quantity" type="number" step="any" placeholder="미입력 · 알 수 없음"></label>
+            <label>평균 매입가 <span class="optional">USD · 선택</span><input id="average-price" type="number" min="0" step="any" placeholder="미입력 · 알 수 없음"></label>
+            <label class="cash-label">투자 가능 현금 <span class="optional">USD · 선택</span><input id="cash" type="number" min="0" step="any" placeholder="미입력 · 알 수 없음"></label>
+          </div>
+          <details id="model-settings"><summary>모델 및 토론 설정<span id="model-summary"></span></summary><div class="form-grid advanced-grid">
+            <label>Quick Model<input id="quick-model" list="quick-options" required autocomplete="off"><datalist id="quick-options"></datalist></label>
+            <label>Deep Model<input id="deep-model" list="deep-options" required autocomplete="off"><datalist id="deep-options"></datalist></label>
+            <label>Research Debate 라운드<input id="research-rounds" type="number" min="1" max="10" value="1" required></label>
+            <label>Risk Debate 라운드<input id="risk-rounds" type="number" min="1" max="10" value="1" required></label>
+          </div></details>
+          <label class="cost-confirm"><input id="confirm-cost" type="checkbox" required><span id="cost-label">이번 분석 실행과 LLM API 비용 발생에 동의합니다.</span></label>
+          <button class="primary-button" type="submit" id="start-button"><span class="button-icon" aria-hidden="true">▷</span><span>분석 시작</span></button>
+          <div id="run-status" class="run-status" role="status">준비됨 · 분석은 직접 시작할 때만 실행됩니다.</div>
+        </form>
+      </section>
+      <section class="card final-card"><div class="card-heading"><h2>최종 보고서</h2><span id="final-rating" class="rating-badge" hidden></span></div>
+        <div id="final-report" class="report-body scroll-report"><div class="empty-state"><div class="empty-symbol">▤</div><h3>분석의 결론이 모이는 곳</h3><p>Portfolio Manager가 완료되면<br>최종 보고서 원문이 표시됩니다.</p></div></div>
+      </section>
+    </div>
+  </section>
+  <section id="history-page" class="history-layout" aria-label="분석 기록 화면" hidden>
+    <div class="history-detail card"><div class="card-heading"><div><p class="eyebrow">SAVED RESEARCH</p><h2 id="history-title">완료된 분석 기록</h2></div><span id="history-rating" class="rating-badge" hidden></span></div>
+      <div id="history-meta" class="history-meta"></div>
+      <div id="history-report" class="report-body scroll-report"><div class="empty-state"><h3>저장된 분석이 없습니다.</h3><p>정상 완료된 UUID JSON 기록이 여기에 표시됩니다.</p></div></div>
+      <div class="history-agents"><h3>에이전트 보고서 · 토론 원문</h3><div id="history-reports" class="report-chips"></div></div>
+    </div>
+    <aside class="card history-sidebar"><div class="card-heading"><h2>분석 기록</h2><span id="history-count" class="counter">0건</span></div><label class="search-label"><span class="sr-only">기록 티커 검색</span><input id="history-search" type="search" placeholder="티커 검색 · 예: NVDA" autocomplete="off"></label><p id="history-note" class="list-note">최근 완료순 · 실행별 개별 기록</p><div id="history-list" class="history-list"></div></aside>
+  </section>
+</main>
+<footer><span>TradingAgents / 개인용 미국 주식 리서치</span><span>분석 근거를 확인하세요. 자동 주문은 실행하지 않습니다.</span></footer>
+<dialog id="report-modal" aria-labelledby="modal-title"><div class="modal-heading"><h2 id="modal-title">보고서 원문</h2><div><button type="button" id="raw-toggle">Markdown 원문</button><button type="button" id="modal-close" aria-label="보고서 닫기">닫기 ×</button></div></div><div id="modal-content" class="report-body modal-content"></div></dialog>
+</body></html>

@@ -99,6 +99,37 @@ class _Client:
         return self.model
 
 
+@pytest.mark.unit
+def test_web_adapter_runs_the_original_graph_and_writer_offline(tmp_path, monkeypatch, offline):
+    pytest.importorskip("fastapi")
+    import json
+
+    from tradingagents.web.service import AnalysisInput, Jobs
+
+    model = ScriptedModel(structured=True)
+    monkeypatch.setattr(trading_graph, "create_tier_client", lambda config, tier, **k: _Client(model))
+    cfg = {**copy.deepcopy(DEFAULT_CONFIG), "results_dir": str(tmp_path / "web-results"),
+           "data_cache_dir": str(tmp_path / "web-cache"), "memory_log_path": str(tmp_path / "web-memory.md")}
+    jobs = Jobs(cfg, graph_factory=trading_graph.TradingAgentsGraph)
+    job = jobs.start(AnalysisInput(ticker="NVDA", trade_date=TRADE_DATE, quick_model="gpt-6-luna",
+                                  deep_model="gpt-6-sol", research_rounds=2, risk_rounds=2,
+                                  cash=0, confirm_cost=True))
+    deadline = time.monotonic() + 15
+    while job.status == "running" and time.monotonic() < deadline:
+        time.sleep(.02)
+    assert job.status == "completed", job.error
+    assert job.state["investment_debate_state"]["count"] == 4
+    assert job.state["risk_debate_state"]["count"] == 6
+    assert job.state["final_rating"] == "Overweight"
+    assert all(status == "completed" for status in job.stages.values())
+    record = json.loads((tmp_path / "web-results" / "runs" / f"{job.archive_id}.json").read_text(encoding="utf-8"))
+    assert record["final_trade_decision"] == job.snapshot()["final_markdown"]
+    assert record["run_settings"]["output_language"] == "Korean"
+    assert record["portfolio"]["positions"][0]["quantity"] is None
+    assert "do not assume zero" in record["portfolio_context"]
+    assert (tmp_path / "web-memory.md").exists()
+
+
 @pytest.fixture
 def offline(monkeypatch, tmp_path):
     """Every vendor answers offline; returns the set of router methods called."""

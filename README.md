@@ -328,6 +328,14 @@ An empty `positions` list means a flat book, which is different from passing not
 
 ## Persistence and Recovery
 
+### Local web dashboard
+
+Install the optional web dependencies with `pip install -e ".[web]"`, then run
+`python -m tradingagents.web.app` and open `http://127.0.0.1:8000`.
+For desktop and same-network phone access, streaming reports, UUID history,
+partial holding inputs and an offline demo, see [the dashboard guide](docs/web-dashboard.md).
+The existing CLI, analysis graph and investment prompts are unchanged.
+
 TradingAgents persists two kinds of state across runs.
 
 ### Memory log

@@ -29,6 +29,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+web = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1"]
 dev = [
     "ruff>=0.16",
     "pytest>=8.0",
@@ -42,6 +43,7 @@ bedrock = [
 
 [project.scripts]
 tradingagents = "cli.main:app"
+tradingagents-web = "tradingagents.web.app:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "tradingagents.__version__"}
@@ -51,7 +53,7 @@ include = ["tradingagents*", "cli*"]
 
 [tool.setuptools.package-data]
 cli = ["static/*"]
-tradingagents = ["assets/*.svg"]
+tradingagents = ["assets/*.svg", "web/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
